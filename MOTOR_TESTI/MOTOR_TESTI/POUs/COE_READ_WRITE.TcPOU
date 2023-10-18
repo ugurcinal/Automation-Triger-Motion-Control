@@ -1,0 +1,53 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="COE_READ_WRITE" Id="{d1fa32c4-71ec-4eb2-9e07-5966f1d47cbc}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM COE_READ_WRITE
+VAR
+coe_write          : FB_EcCoESdoWrite; // Function Block for writing in CoE
+   coe_read           : FB_EcCoESdoRead;  // Function Block for reading from CoE
+   userNetId             : T_AmsNetId := '5.94.222.87.1.1'; // Have to be entered
+   userSlaveAddr         : UINT := 1006;     // Have to be entered
+   startWrite            : BOOL := FALSE;    // Sign for start writing
+   startRead             : BOOL := FALSE;    // Sign for start reading
+   nState                : BYTE := 0;        // RW-status
+   // Example: Read EL3751 PAI Internal Data: Temperature Value
+   int16Buffer           : INT;              // Buffer for reading
+   // Example: Select EL3751 Filter1: 22 = IIR Butterw. LP 5th Ord. 1000 Hz:
+   uint16Buffer          : UINT:=22;         // Buffer for writing
+   bTxPDOState AT%I*     : BOOL;             // (PDO for synchronization)
+	EXEC: BOOL;
+	bBusy: STRING(INT#4);
+	EXEC_wRITE: BOOL;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[
+coe_read(
+   sNetId:= '5.94.222.87.1.1', 
+   nSlaveAddr:= userSlaveAddr, 
+   nSubIndex:= 16#11, 
+   nIndex:= 16#2000,
+   pDstBuf:= ADR(int16Buffer), 
+   cbBufLen:= 16, 
+   bExecute:= EXEC, 
+   tTimeout:= T#1S,
+   );
+    // Write entry
+   coe_write(
+   sNetId:= userNetId,
+   nSlaveAddr:= userSlaveAddr,
+   nSubIndex:= 16#11,
+   nIndex:= 16#2000,
+   pSrcBuf:= ADR(uint16Buffer),
+   cbBufLen:= 2,
+   bExecute:= EXEC_wRITE,
+   tTimeout:= T#1S
+   );]]></ST>
+    </Implementation>
+    <LineIds Name="COE_READ_WRITE">
+      <LineId Id="44" Count="0" />
+      <LineId Id="21" Count="19" />
+      <LineId Id="5" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

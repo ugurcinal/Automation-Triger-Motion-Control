@@ -1,0 +1,140 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="MAIN" Id="{1b088b4c-66be-4399-ab38-2a8e9c5210f0}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM MAIN
+VAR
+	HIDRIVE_PLC_IN_1 AT%I* : DINT; // MOTION/DRIVE İÇİNDE / OUTPUT / NDATAOUT1 LİNKİNE EKLENİR
+	HIDRIVE_PLC_OUT_1 AT%Q* : DINT; // HIDRIVE İÇİNDE RX PDO4 İÇİNDEKİ TARGET POSİTİONA LİNKLENİR BU LİNKLEME YAPILMAZSA MOTOR ÇALIŞMAZ
+	TORQUE_MONITOR_1 AT%I* : INT ;
+	CURRENT_ACTUAL : REAL;
+	MAX_PEEK_CURRENT : INT := 10;
+	
+	OPERATING_MODE_1_WRITE AT%Q* : INT:=203; // 0 SPEED CONTROL - 203 ETHERCAT - 110 CURRENT
+		OPERATING_MODE_1_READ AT%I* : INT; // 0 SPEED CONTROL - 203 ETHERCAT - 110 CURRENT
+		OPERATING_MODE_1_READ_SCADA: REAL;
+		//ug
+		WINDING_THERMAL_IMAGE AT %I* : INT;
+	OPMODE_CHANGE: BOOL;
+	OPMODE: REAL;
+	VOL_READ_1 AT %I* : INT ;
+	VOL_READ_2 AT %I* : INT ;
+	TORQ_VOLTAGE_HESAP : REAL;
+	TORQ_VOLTAGE_OFFSET : REAL := 2.63;
+	TORQ_VOLTAGE_FARK : REAL;
+	A : LREAL := -3.00499219E-02;
+	B : LREAL := 1.73472887E-02;
+	C : LREAL := 9.69692536E+00;
+	TORQ_ACTUAL : LREAL;
+	
+	M_TORQ : REAL := 9.2348; // 9.2348
+	N_TORQ : REAL := -24.057; // -24.057
+	TEST_TORQUE_SENSOR_1 AT %I* : INT ;
+	M_TEST : INT := 409;
+	N_TEST : INT := 204;
+	KISSLER_TORQUE_SENSOR_SCALED: REAL;
+
+	REVOLUTION_RadSn : REAL;
+	REVOLUTION_RPM: LREAL; //FROM BECKHOFF NC ( NUMERIC/Motion CONTROL )
+	
+	Torque_Offset : REAL;
+	
+	
+//	bStartScope : BOOL;
+//	bStopScope : BOOL;
+//	bExportScope : BOOL;
+//	Kontrol1: BOOL;
+//	Kontrol2: BOOL;
+//	Kontrol3: BOOL;
+	
+//	SET_TO_SETPOINT2 : INT;
+	
+//	StartCase: BOOL;
+//	RestartCase: BOOL;
+	
+//	fbTimer: TON;
+//	bTriggerTimer1: BOOL;
+//	bTriggerTimer2: BOOL;
+//	bTriggerTimer3: BOOL;
+
+//	nState: UDINT := 0;
+	
+	eReqState	:BOOL;
+	
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[REVOLUTION_RPM:=(Main_Gvl.MOTOR_AXIS1.NcToPlc.ActVelo/360)*60;
+CURRENT_ACTUAL := INT_TO_REAL(TORQUE_MONITOR_1) * MAX_PEEK_CURRENT / 1000;
+IF HIDRIVE_PLC_OUT_1=0 THEN
+	MAIN_GVL.ENABLE_MOTOR:=FALSE;
+END_IF
+HIDRIVE_PLC_OUT_1 := HIDRIVE_PLC_IN_1;
+OPERATING_MODE_1_READ_SCADA:=INT_TO_REAL(OPERATING_MODE_1_READ);
+IF OPMODE_CHANGE THEN
+	OPERATING_MODE_1_WRITE:=REAL_TO_INT(OPMODE);
+	OPMODE_CHANGE:=FALSE;
+END_IF
+
+//TORQ_HESAP_1 := M_TORQ*((VOL_READ_1/32768)*10) - N_TORQ;
+TORQ_VOLTAGE_HESAP := INT_TO_REAL(VOL_READ_1)/32768 *10;
+
+TORQ_VOLTAGE_FARK := TORQ_VOLTAGE_HESAP - TORQ_VOLTAGE_OFFSET;
+TORQ_ACTUAL := A*(TORQ_VOLTAGE_FARK*TORQ_VOLTAGE_FARK*TORQ_VOLTAGE_FARK) + B*(TORQ_VOLTAGE_FARK*TORQ_VOLTAGE_FARK) + C*TORQ_VOLTAGE_FARK;
+
+
+REVOLUTION_RadSn := REVOLUTION_RPM*2*3.14159/60;
+
+KISSLER_TORQUE_SENSOR_SCALED:=((INT_TO_REAL(VOL_READ_1)-8192)/6554)*17.5;
+
+MAIN_GVL.MC_POWER_MOTOR(
+	Axis:=MAIN_GVL.MOTOR_AXIS1 , 
+	Enable:=MAIN_GVL.ENABLE_MOTOR , 
+	Enable_Positive:=MAIN_GVL.ENABLE_MOTOR , 
+	Enable_Negative:=MAIN_GVL.ENABLE_MOTOR , 
+	Override:=MAIN_GVL.OverrideRatio, 
+	BufferMode:= , 
+	Options:= , 
+	Status=> , 
+	Busy=> , 
+	Active=> , 
+	Error=> , 
+	ErrorID=> );
+	
+
+	
+	
+	COE_READ_WRITE();
+	SINGEN();
+	]]></ST>
+    </Implementation>
+    <LineIds Name="MAIN">
+      <LineId Id="192" Count="0" />
+      <LineId Id="226" Count="0" />
+      <LineId Id="39" Count="2" />
+      <LineId Id="37" Count="0" />
+      <LineId Id="51" Count="0" />
+      <LineId Id="50" Count="0" />
+      <LineId Id="52" Count="0" />
+      <LineId Id="56" Count="0" />
+      <LineId Id="53" Count="0" />
+      <LineId Id="73" Count="0" />
+      <LineId Id="34" Count="0" />
+      <LineId Id="96" Count="0" />
+      <LineId Id="263" Count="0" />
+      <LineId Id="262" Count="0" />
+      <LineId Id="266" Count="0" />
+      <LineId Id="269" Count="0" />
+      <LineId Id="224" Count="0" />
+      <LineId Id="223" Count="0" />
+      <LineId Id="130" Count="0" />
+      <LineId Id="97" Count="0" />
+      <LineId Id="74" Count="0" />
+      <LineId Id="8" Count="11" />
+      <LineId Id="2" Count="0" />
+      <LineId Id="547" Count="0" />
+      <LineId Id="610" Count="0" />
+      <LineId Id="362" Count="3" />
+      <LineId Id="26" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,496 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="SINGEN" Id="{1e764d21-3846-46cf-bc05-24e668053bfd}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM SINGEN
+VAR
+	DEGREE: INT;
+	SINE_MODE_SELECT: REAL;
+	SINGEN: FB_CTRL_SIGNAL_GENERATOR;
+	SINGEN_SWEEP: FB_CTRL_SIGNAL_GENERATOR;
+	State: E_CTRL_STATE;
+	ErrorID: E_CTRL_ERRORCODES;
+	Error: BOOL;
+	WaveOutput: LREAL;
+	stParams_deneme: ST_CTRL_SIGNAL_GENERATOR_PARAMS;
+	SineSweep_params: ST_CTRL_SIGNAL_GENERATOR_PARAMS;
+	Signal_Type: E_CTRL_SIGNAL_TYPE;
+	
+	SET_TO_SETPOINT: REAL;
+
+	start : BOOL;
+	
+	eMode_deneme: E_CTRL_MODE;
+	SINE_SWEEP: BOOL;
+	CLOCK: INT;
+
+	CLOCK_1: INT;
+	AT_OFFSET: BOOL;
+	SINE_GENERATOR: BOOL;
+	
+	RPM_TO_Degree_1: LREAL;
+	PR5_INTERNALSETPOINT_1 AT%Q*: INT;
+	CURRENT_REFERENCE : INT;
+	VELOCITY_REFERENCE_rpm : INT;
+	VELOCITY_REFERENCE_RadSn : LREAL;
+	
+	RPM_TO_Degree_2: LREAL;
+	PR5_INTERNALSETPOINT_2 AT%Q*: INT;
+	
+	RPM_TO_Degree_4: LREAL;
+	PR5_INTERNALSETPOINT_4 AT%Q*: INT;
+	
+	RPM_TO_Degree_5: LREAL;
+	PR5_INTERNALSETPOINT_5 AT%Q*: INT;
+	
+	SineWave_PERIOD: TIME:=T#10S;
+	SineSweep_PERIOD:TIME:=T#10S;
+	MANUAL_SET_POINT: BOOL;
+	
+	SINE_OFFSET: REAL:=0;
+	SINE_AMPLITUDE: REAL:=10;
+	CTRL_CYCLE_TIME: TIME:=T#10MS;
+	CTRL_TIME_FROM_SCADA: REAL:=10;
+	TASK_CYCLE_TIME: TIME:=T#10MS;
+	TASK_TIME_FROM_SCADA : REAL:=10;
+	PERIOD_FROM_SCADA: REAL:=10;
+	
+	START_TIME_OFFSET: TIME:=T#0MS;
+	START_TIME_FROM_SCADA:REAL;
+	
+	MAX_SineSweep_PERIOD: TIME := T#1000MS;
+	MAX_SineSweep_PERIOD_FROM_SCADA: REAL:=1000;
+	SET_SETPOINT_0: BOOL;
+	START_SINE: BOOL;
+	STOP_SINE: BOOL;
+	SCADA_ONLINE: BOOL:=TRUE;
+	FB_CTRL_GET_TASK_CYCLETIME: FB_CTRL_GET_TASK_CYCLETIME;
+	TaskCycleTime: TIME;
+	bCycleTimeValid: BOOL;
+	eState: Tc2_ControllerToolbox.E_CTRL_STATE;
+	ErrID: Tc2_ControllerToolbox.E_CTRL_ERRORCODES;
+	Err: BOOL;
+	check1: BOOL;
+	FALLDOWN_RATIO: REAL:=2;
+	SWEEPPERIOD_FROM_SCADA: REAL;
+	ONE_TIME_CHECK: BOOL;
+	ONE_TIME_CHECK2: BOOL;
+	SinSweep_PERIOD_FOR_SCADA: REAL;
+	MAX_SineSweep_PERIOD_FOR_SCADA: REAL;
+	START_TIME_OFFSET_FOR_SCADA: REAL;
+	TASK_CYCLE_TIME_FOR_SCADA: REAL;
+	SineSweep_PERIOD_FOR_SCADA:REAL;
+	SineWave_PERIOD_FOR_SCADA:REAL;
+	CTRL_CYCLE_TIME_FOR_SCADA:REAL;
+	
+	torqueValues: ARRAY[0..19] OF REAL := [-150, -120, -100 , -80, -60, -40, -20, -10, -5, -1, 1, 5, 10, 20, 40, 60, 80, 100, 120, 150];
+	torqueGain : REAL := 1;
+	counter: INT := 0;
+	index: INT := 0;
+	duration: INT := 500;
+	
+	bSingenStartScope : BOOL;
+	bSingenStopScope : BOOL;
+	bSingenExportScope : BOOL;
+	
+	Kontrol1: BOOL;
+	Kontrol2: BOOL;
+	Kontrol3: BOOL;
+	
+	StartCase: BOOL;
+	RestartCase: BOOL;
+	
+	fbTimer1: TON;
+	fbTimer2: TON;
+	fbTimer3: TON;
+
+	bTriggerTimer1: BOOL;
+	bTriggerTimer2: BOOL;
+	bTriggerTimer3: BOOL;
+
+	nState: UDINT := 0;
+	
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[CURRENT_REFERENCE := PR5_INTERNALSETPOINT_1;
+VELOCITY_REFERENCE_rpm := PR5_INTERNALSETPOINT_1;
+VELOCITY_REFERENCE_RadSn := VELOCITY_REFERENCE_rpm*2*3.14159/60;
+
+RPM_TO_Degree_1:= (INT_TO_REAL(PR5_INTERNALSETPOINT_1)/60)*360;
+RPM_TO_Degree_2:= (INT_TO_REAL(PR5_INTERNALSETPOINT_2)/60)*360;
+RPM_TO_Degree_4:= (INT_TO_REAL(PR5_INTERNALSETPOINT_4)/60)*360;
+RPM_TO_Degree_5:= (INT_TO_REAL(PR5_INTERNALSETPOINT_5)/60)*360;
+
+
+IF counter < duration AND start THEN
+	SET_TO_SETPOINT := torqueValues[index]* 9.5493;
+	counter := counter + 1;
+	IF index > 19 THEN
+		SET_TO_SETPOINT := 0;
+		index := 0;
+		start := FALSE;
+	END_IF
+	
+ELSIF start AND counter >= duration THEN
+	index := index +1;
+	counter := 0;
+END_IF
+
+IF (RestartCase = TRUE) THEN
+	nState := 0;	
+    bSingenStartScope:=FALSE;
+	bSingenStopScope:=FALSE;
+	bSingenExportScope:=FALSE;	
+	RestartCase := FALSE;
+	StartCase := FALSE;
+END_IF
+
+CASE nState OF
+0:
+	IF (StartCase = TRUE) THEN		
+		bSingenStartScope:=TRUE;
+   	    nState := 10;	
+	END_IF
+
+10:
+    IF bSingenStartScope THEN
+        bTriggerTimer1 := TRUE;
+        nState := 20;
+    END_IF
+20:
+    IF (Kontrol1 = TRUE) THEN
+        bTriggerTimer1 := FALSE;
+		SET_TO_SETPOINT:= 1000;
+		PR5_INTERNALSETPOINT_1:=REAL_TO_INT(SET_TO_SETPOINT);
+        bTriggerTimer2 := TRUE;
+        nState := 30;
+    END_IF
+30:
+    IF (Kontrol2 = TRUE) THEN
+        bTriggerTimer2 := FALSE;
+		SET_TO_SETPOINT:= 0;
+		PR5_INTERNALSETPOINT_1:=REAL_TO_INT(SET_TO_SETPOINT);
+        bTriggerTimer3 := TRUE;
+        nState := 40;
+    END_IF
+40: 
+    IF (Kontrol3 = TRUE) THEN
+        bTriggerTimer3 := FALSE;
+		bSingenStopScope := TRUE;
+        nState := 50;
+    END_IF
+50:
+    IF bSingenStopScope THEN
+        bSingenExportScope:=TRUE;
+		//RestartCase := TRUE;
+
+    END_IF
+END_CASE
+
+fbTimer1(IN:=bTriggerTimer1, PT:=T#1S, Q=> Kontrol1);	
+fbTimer2(IN:=bTriggerTimer2, PT:=T#5S, Q=> Kontrol2);	
+fbTimer3(IN:=bTriggerTimer3, PT:=T#1S, Q=> Kontrol3);
+
+
+IF MANUAL_SET_POINT THEN
+	PR5_INTERNALSETPOINT_1:=REAL_TO_INT(SET_TO_SETPOINT);
+	PR5_INTERNALSETPOINT_2:=REAL_TO_INT(SET_TO_SETPOINT);
+	PR5_INTERNALSETPOINT_4:=REAL_TO_INT(SET_TO_SETPOINT);
+	PR5_INTERNALSETPOINT_5:=REAL_TO_INT(SET_TO_SETPOINT);
+	IF SET_SETPOINT_0 THEN
+	SET_TO_SETPOINT:=0;
+
+	SET_SETPOINT_0:=FALSE;
+END_IF
+
+
+
+ELSIF NOT MANUAL_SET_POINT AND NOT(SINE_GENERATOR OR SINE_SWEEP) THEN
+	PR5_INTERNALSETPOINT_1:=0;
+	PR5_INTERNALSETPOINT_2:=0;
+	PR5_INTERNALSETPOINT_4:=0;
+	PR5_INTERNALSETPOINT_5:=0;
+END_IF
+
+
+
+IF START_SINE THEN
+	eMode_deneme := E_CTRL_MODE.eCTRL_MODE_ACTIVE;
+	START_SINE:=FALSE;
+	check1:=TRUE;
+END_IF
+
+IF STOP_SINE THEN
+	eMode_deneme:= e_CTRL_MODE.eCTRL_MODE_PASSIVE;
+	STOP_SINE:=FALSE;
+END_IF
+
+IF (SINE_GENERATOR AND SINE_SWEEP) OR MANUAL_SET_POINT THEN
+	eMode_deneme:=e_CTRL_MODE.eCTRL_MODE_PASSIVE;
+END_IF
+
+/// scada tarafından 0 gelirse sinus 1 gelirse saw 2 gelirse triangle
+IF SINE_MODE_SELECT=0 THEN
+Signal_Type:=E_CTRL_SIGNAL_TYPE.eCTRL_SINUS;
+ELSIF SINE_MODE_SELECT=1 THEN
+Signal_Type:=E_CTRL_SIGNAL_TYPE.eCTRL_SAWTOOTH;
+ELSIF SINE_MODE_SELECT=2 THEN
+Signal_Type:=E_CTRL_SIGNAL_TYPE.eCTRL_TRIANGLE;
+END_IF
+
+IF SCADA_ONLINE AND NOT (eMode_DENEME= E_CTRL_MODE.eCTRL_MODE_ACTIVE) THEN
+CTRL_CYCLE_TIME:=LREAL_TO_TIME(CTRL_TIME_FROM_SCADA);
+SineWave_PERIOD:=LREAL_TO_TIME(PERIOD_FROM_SCADA);
+SineSweep_PERIOD:=LREAL_TO_TIME(SWEEPPERIOD_FROM_SCADA);
+MAX_SineSweep_PERIOD:=REAL_TO_TIME(MAX_SineSweep_PERIOD_FROM_SCADA);
+TASK_CYCLE_TIME:=LREAL_TO_TIME(TASK_TIME_FROM_SCADA);
+START_TIME_OFFSET:=LREAL_TO_TIME(START_TIME_FROM_SCADA);
+
+END_IF 
+IF SINE_GENERATOR THEN
+	//SINE Dalgasıın parametreleri, gerekli bilgi infosys de bulunabilir.
+	stParams_deneme.eSignalType:=Signal_TYPE;
+	stParams_deneme.fAmplitude:=SINE_AMPLITUDE;
+	stParams_deneme.tCtrlCycleTime:=CTRL_CYCLE_TIME;
+	stParams_deneme.tCylceDuration:=SineWave_PERIOD  ;
+	stParams_deneme.tStart:=START_TIME_OFFSET;
+	stParams_deneme.tTaskCycleTime:=TASK_CYCLE_TIME;
+	stParams_deneme.fOffset:=SINE_OFFSET;
+	
+	IF eMode_deneme = E_CTRL_MODE.eCTRL_MODE_RESET THEN
+		SINGEN(
+		fManValue:=, 
+		eMode:=eMode_deneme, 
+		fOut=> WaveOutput, 
+		eState=> State, 
+		eErrorId=> ErrorID, 
+		bError=> Error, 
+		stParams:= SineSweep_params);
+	END_IF
+	
+	IF eMode_deneme = E_CTRL_MODE.eCTRL_MODE_ACTIVE AND AT_OFFSET THEN
+		SINGEN(
+			fManValue:=, 
+			eMode:=eMode_deneme, 
+			fOut=> WaveOutput, 
+			eState=> State, 
+			eErrorId=> ErrorID, 
+			bError=> Error, 
+			stParams:= stParams_deneme);
+		END_IF
+		IF eMode_deneme = E_CTRL_MODE.eCTRL_MODE_ACTIVE AND AT_OFFSET THEN
+			SET_TO_SETPOINT:=WaveOutput;
+			PR5_INTERNALSETPOINT_1:=REAL_TO_INT(SET_TO_SETPOINT);
+			PR5_INTERNALSETPOINT_2:=REAL_TO_INT(SET_TO_SETPOINT);
+			PR5_INTERNALSETPOINT_4:=REAL_TO_INT(SET_TO_SETPOINT);
+			PR5_INTERNALSETPOINT_5:=REAL_TO_INT(SET_TO_SETPOINT);
+		END_IF
+	END_IF
+
+IF SINE_SWEEP THEN
+	//SINE Dalgasıın parametreleri, gerekli bilgi infosys de bulunabilir.
+	SineSweep_params.eSignalType:=Signal_TYPE;
+	SineSweep_params.fAmplitude:=SINE_AMPLITUDE;
+	SineSweep_params.tCtrlCycleTime:=T#10MS;
+	SineSweep_params.tCylceDuration:=SineSweep_PERIOD ;
+	SineSweep_params.tStart:=T#0MS;
+	SineSweep_params.tTaskCycleTime:=T#10MS;
+	SineSweep_params.fOffset:=SINE_OFFSET;
+	IF eMode_deneme = E_CTRL_MODE.eCTRL_MODE_RESET THEN
+		SINGEN_SWEEP(
+		fManValue:=, 
+		eMode:=eMode_deneme, 
+		fOut=> WaveOutput, 
+		eState=> State, 
+		eErrorId=> ErrorID, 
+		bError=> Error, 
+		stParams:= SineSweep_params);
+	END_IF
+	IF eMode_deneme = E_CTRL_MODE.eCTRL_MODE_ACTIVE AND AT_OFFSET THEN
+		
+		SINGEN_SWEEP(
+		fManValue:=, 
+		eMode:=eMode_deneme, 
+		fOut=> WaveOutput, 
+		eState=> State, 
+		eErrorId=> ErrorID, 
+		bError=> Error, 
+		stParams:= SineSweep_params);
+		
+		IF eMode_deneme = E_CTRL_MODE.eCTRL_MODE_ACTIVE AND AT_OFFSET THEN
+			SET_TO_SETPOINT:=LREAL_TO_INT(WaveOutput);
+			PR5_INTERNALSETPOINT_1:=REAL_TO_INT(SET_TO_SETPOINT);
+			PR5_INTERNALSETPOINT_2:=REAL_TO_INT(SET_TO_SETPOINT);
+			PR5_INTERNALSETPOINT_4:=REAL_TO_INT(SET_TO_SETPOINT);
+			PR5_INTERNALSETPOINT_5:=REAL_TO_INT(SET_TO_SETPOINT);
+		END_IF
+		
+	END_IF
+END_IF
+
+//SINE SWEEP TESTININ GERÇEKLEŞTIRILEBILMESI İÇİN HER SINUS DALGASININ ARDINDAN ÖNCEKININ YARISI PERIYODUNDA
+//BIR SINUS DALGASININ YARATILMASINI SAĞLAR,0.5HZ'den daha yüksek HZ de bir dalga yaratılmasını önler
+IF SINE_SWEEP THEN
+	IF eMode_deneme=E_CTRL_MODE.eCTRL_MODE_ACTIVE AND AT_OFFSET THEN
+		CLOCK:=CLOCK+1;
+	END_IF
+	IF CLOCK/(TIME_TO_INT(SineSweep_params.tCylceDuration)/TIME_TO_INT(SineSweep_params.tCtrlCycleTime))= 1 AND SineSweep_PERIOD > MAX_SineSweep_PERIOD THEN
+		SineSweep_PERIOD:=REAL_TO_TIME(TIME_TO_REAL(SineSweep_PERIOD)/FALLDOWN_RATIO);
+		CLOCK:=0;
+	END_IF
+	IF SineSweep_PERIOD < MAX_SineSweep_PERIOD THEN
+		eMode_deneme:=e_CTRL_MODE.eCTRL_MODE_PASSIVE;
+	END_IF
+END_IF
+
+// SINE SWEEP MODUNDA MOTORUN EN BAŞTA VERILEN OFFSET DERECESINE KADEMELI OLARAK ÇIKMASINI SINUS DALGASI DURDURULDUKTAN SONRA DA KADEMELI
+//OLARAK 0 DEĞERINE İNMESİNİ SAĞLAR
+IF eMode_deneme= e_CTRL_MODE.eCTRL_MODE_PASSIVE AND(SINE_SWEEP OR SINE_GENERATOR) THEN
+	
+	IF PR5_INTERNALSETPOINT_1 > 0 THEN
+		CLOCK_1:=CLOCK_1 + 1 ;
+		IF CLOCK_1 MOD 10 = 0 THEN
+			PR5_INTERNALSETPOINT_1:=PR5_INTERNALSETPOINT_1-1;
+			PR5_INTERNALSETPOINT_2:=PR5_INTERNALSETPOINT_1;
+			PR5_INTERNALSETPOINT_4:=PR5_INTERNALSETPOINT_1;
+			PR5_INTERNALSETPOINT_5:=PR5_INTERNALSETPOINT_1;
+			SET_TO_SETPOINT:=PR5_INTERNALSETPOINT_1;
+		END_IF
+	ELSIF PR5_INTERNALSETPOINT_1 < 0 THEN
+		CLOCK_1:=CLOCK_1 + 1 ;
+		IF CLOCK_1 MOD 10 = 0 THEN
+			PR5_INTERNALSETPOINT_1:=PR5_INTERNALSETPOINT_1+1;
+			PR5_INTERNALSETPOINT_2:=PR5_INTERNALSETPOINT_1;
+			PR5_INTERNALSETPOINT_4:=PR5_INTERNALSETPOINT_1;
+			PR5_INTERNALSETPOINT_5:=PR5_INTERNALSETPOINT_1;
+			SET_TO_SETPOINT:=PR5_INTERNALSETPOINT_1;
+			
+		END_IF
+	ELSIF PR5_INTERNALSETPOINT_1=0 THEN
+		CLOCK_1:=0;
+		AT_OFFSET:=FALSE;
+		eMode_deneme:=e_cTRL_MODE.eCTRL_MODE_RESET;
+	END_IF
+	
+ELSIF eMode_deneme=e_CTRL_MODE.eCTRL_MODE_ACTIVE AND NOT AT_OFFSET AND (SINE_SWEEP OR SINE_GENERATOR) THEN
+	IF PR5_INTERNALSETPOINT_1 > SINE_OFFSET THEN
+		CLOCK_1:=CLOCK_1 + 1 ;
+		IF CLOCK_1 MOD 10 = 0 THEN
+			PR5_INTERNALSETPOINT_1:=PR5_INTERNALSETPOINT_1-1;
+			PR5_INTERNALSETPOINT_2:=PR5_INTERNALSETPOINT_1;
+			PR5_INTERNALSETPOINT_4:=PR5_INTERNALSETPOINT_1;
+			PR5_INTERNALSETPOINT_5:=PR5_INTERNALSETPOINT_1;
+			SET_TO_SETPOINT:=PR5_INTERNALSETPOINT_1;
+		END_IF
+ELSIF PR5_INTERNALSETPOINT_1 < SINE_OFFSET THEN
+		CLOCK_1:=CLOCK_1 + 1 ;
+		IF CLOCK_1 MOD 10 = 0 THEN
+			PR5_INTERNALSETPOINT_1:=PR5_INTERNALSETPOINT_1+1;
+			PR5_INTERNALSETPOINT_2:=PR5_INTERNALSETPOINT_1;
+			PR5_INTERNALSETPOINT_4:=PR5_INTERNALSETPOINT_1;
+			PR5_INTERNALSETPOINT_5:=PR5_INTERNALSETPOINT_1;
+			SET_TO_SETPOINT:=PR5_INTERNALSETPOINT_1;
+		END_IF
+ELSIF PR5_INTERNALSETPOINT_1=SINE_OFFSET THEN
+		CLOCK_1:=0;
+		AT_OFFSET:=TRUE;
+	END_IF
+END_IF
+
+SinSweep_PERIOD_FOR_SCADA:=TIME_TO_REAL(SineSweep_PERIOD);
+CTRL_CYCLE_TIME_FOR_SCADA:=TIME_TO_REAL(CTRL_CYCLE_TIME);
+SineWave_PERIOD_FOR_SCADA:=TIME_TO_REAL(SineWave_PERIOD);
+SineSweep_PERIOD_FOR_SCADA:=TIME_TO_REAL(SineSweep_PERIOD);
+MAX_SineSweep_PERIOD_FOR_SCADA:=TIME_TO_REAL(MAX_SineSweep_PERIOD);
+TASK_CYCLE_TIME_FOR_SCADA:=TIME_TO_REAL(TASK_CYCLE_TIME);
+START_TIME_OFFSET_FOR_SCADA:=TIME_TO_REAL(START_TIME_OFFSET);
+
+
+]]></ST>
+    </Implementation>
+    <LineIds Name="SINGEN">
+      <LineId Id="647" Count="0" />
+      <LineId Id="348" Count="0" />
+      <LineId Id="847" Count="0" />
+      <LineId Id="846" Count="0" />
+      <LineId Id="6" Count="3" />
+      <LineId Id="736" Count="0" />
+      <LineId Id="935" Count="0" />
+      <LineId Id="727" Count="0" />
+      <LineId Id="10" Count="0" />
+      <LineId Id="757" Count="0" />
+      <LineId Id="745" Count="1" />
+      <LineId Id="758" Count="0" />
+      <LineId Id="748" Count="0" />
+      <LineId Id="747" Count="0" />
+      <LineId Id="750" Count="0" />
+      <LineId Id="738" Count="0" />
+      <LineId Id="751" Count="0" />
+      <LineId Id="741" Count="0" />
+      <LineId Id="740" Count="0" />
+      <LineId Id="1042" Count="25" />
+      <LineId Id="1094" Count="0" />
+      <LineId Id="1068" Count="6" />
+      <LineId Id="1095" Count="0" />
+      <LineId Id="1075" Count="18" />
+      <LineId Id="729" Count="0" />
+      <LineId Id="731" Count="0" />
+      <LineId Id="728" Count="0" />
+      <LineId Id="11" Count="4" />
+      <LineId Id="566" Count="3" />
+      <LineId Id="565" Count="0" />
+      <LineId Id="734" Count="0" />
+      <LineId Id="733" Count="0" />
+      <LineId Id="735" Count="0" />
+      <LineId Id="16" Count="5" />
+      <LineId Id="269" Count="0" />
+      <LineId Id="271" Count="0" />
+      <LineId Id="332" Count="0" />
+      <LineId Id="331" Count="0" />
+      <LineId Id="335" Count="0" />
+      <LineId Id="333" Count="0" />
+      <LineId Id="360" Count="0" />
+      <LineId Id="334" Count="0" />
+      <LineId Id="339" Count="3" />
+      <LineId Id="338" Count="0" />
+      <LineId Id="22" Count="3" />
+      <LineId Id="194" Count="0" />
+      <LineId Id="26" Count="0" />
+      <LineId Id="235" Count="0" />
+      <LineId Id="27" Count="0" />
+      <LineId Id="239" Count="0" />
+      <LineId Id="242" Count="1" />
+      <LineId Id="241" Count="0" />
+      <LineId Id="238" Count="0" />
+      <LineId Id="543" Count="0" />
+      <LineId Id="494" Count="0" />
+      <LineId Id="247" Count="0" />
+      <LineId Id="252" Count="0" />
+      <LineId Id="427" Count="0" />
+      <LineId Id="540" Count="0" />
+      <LineId Id="256" Count="0" />
+      <LineId Id="261" Count="0" />
+      <LineId Id="544" Count="0" />
+      <LineId Id="28" Count="9" />
+      <LineId Id="536" Count="0" />
+      <LineId Id="527" Count="8" />
+      <LineId Id="38" Count="0" />
+      <LineId Id="537" Count="0" />
+      <LineId Id="39" Count="28" />
+      <LineId Id="520" Count="6" />
+      <LineId Id="518" Count="1" />
+      <LineId Id="68" Count="57" />
+      <LineId Id="502" Count="0" />
+      <LineId Id="126" Count="3" />
+      <LineId Id="514" Count="0" />
+      <LineId Id="130" Count="25" />
+      <LineId Id="558" Count="0" />
+      <LineId Id="541" Count="0" />
+      <LineId Id="546" Count="4" />
+      <LineId Id="545" Count="0" />
+      <LineId Id="512" Count="0" />
+      <LineId Id="506" Count="0" />
+      <LineId Id="5" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

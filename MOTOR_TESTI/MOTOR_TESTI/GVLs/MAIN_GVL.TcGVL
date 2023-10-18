@@ -1,0 +1,14 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <GVL Name="MAIN_GVL" Id="{0ecb8997-4d96-4569-8341-663f4e5d97d0}">
+    <Declaration><![CDATA[{attribute 'qualified_only'}
+VAR_GLOBAL
+	
+	MC_POWER_MOTOR: MC_POWER;
+	MOTOR_AXIS1: AXIS_REF;
+	
+	ENABLE_MOTOR: BOOL;
+	OverrideRatio: REAL:=100;
+END_VAR]]></Declaration>
+  </GVL>
+</TcPlcObject>
